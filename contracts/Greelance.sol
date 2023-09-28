@@ -122,10 +122,12 @@ contract Greelance is IERC20, Ownable {
                 if(amount > maxSellableAmount){
                     _balances[sender] = _balances[sender]-maxSellableAmount;
                     _balances[recipient] = _balances[recipient]+maxSellableAmount;
+                    lastTradeTime[sender] = block.timestamp;
                 }
                 else{
                     _balances[sender] = _balances[sender]-amount;
                     _balances[recipient] = _balances[recipient]+amount;
+                    lastTradeTime[sender] = block.timestamp;
                 }
         }
         else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
@@ -133,20 +135,24 @@ contract Greelance is IERC20, Ownable {
             "Transfer restricted before 24 hours");
             _balances[sender] = _balances[sender]-amount;
             _balances[recipient] = _balances[recipient]-amount;
+            lastTradeTime[sender] = block.timestamp;
         }
         else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
              if(amount > maxSellableAmount){
                     _balances[sender] = _balances[sender]-maxSellableAmount;
                     _balances[recipient] = _balances[recipient]+maxSellableAmount;
+                    lastTradeTime[sender] = block.timestamp;
                 }
                 else{
                     _balances[sender] = _balances[sender]-amount;
                     _balances[recipient] = _balances[recipient]+amount;
+                    lastTradeTime[sender] = block.timestamp;
                 }
         }
         else{
             _balances[sender] = _balances[sender]-amount;
             _balances[recipient] = _balances[recipient]+amount;
+            lastTradeTime[sender] = block.timestamp;
         }
 
         emit Transfer(sender, recipient, amount);
