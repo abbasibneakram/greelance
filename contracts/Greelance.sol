@@ -94,14 +94,19 @@ contract Greelance is IERC20, Ownable {
         return true;
     }
 
-    function decreaseAllowance(address spender, uint256 subtractedValue)
+  function decreaseAllowance(address spender, uint256 subtractedValue)
         external
         returns (bool)
     {
+        uint256 currentAllowance = _allowances[msg.sender][spender];
+        require(
+            currentAllowance >= subtractedValue,
+            "Allowance insufficient"
+        );
         _approve(
             msg.sender,
             spender,
-            _allowances[msg.sender][spender]-subtractedValue
+            currentAllowance-subtractedValue
         );
         return true;
     }
