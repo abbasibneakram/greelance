@@ -35,8 +35,6 @@ contract Greelance is IERC20, Ownable {
 
     constructor() {
         _balances[msg.sender] = totalSupply;
-        taxCollector = msg.sender;
-        emit Transfer(address(0), msg.sender, totalSupply);
     }
 
     function balanceOf(address account) external view override returns (uint256) {
