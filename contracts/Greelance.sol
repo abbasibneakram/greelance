@@ -16,11 +16,11 @@ contract Greelance is IERC20, Ownable {
 
     // Maximum sellable amount for 24 hours
     uint256 public maxSellableAmount;
-    bool public maxSellableRestrictionEnabled = true;
+    bool public maxSellableRestrictionEnabled = true; // Default to enabled
 
     // Trading status
     bool public tradingPaused = true;
-    bool public trading24HrsRestrictionEnabled = true;
+    bool public trading24HrsRestrictionEnabled = true; // Default to enabled
     mapping(address=>uint256) public lastTradeTime;
 
     // Reentrancy guard
@@ -121,11 +121,11 @@ contract Greelance is IERC20, Ownable {
             "Transfer restricted before 24 hours");
                 if(amount > maxSellableAmount){
                     _balances[sender] = _balances[sender]-maxSellableAmount;
-                    _balances[recipient] = _balances[recipient]-maxSellableAmount;
+                    _balances[recipient] = _balances[recipient]+maxSellableAmount;
                 }
                 else{
                     _balances[sender] = _balances[sender]-amount;
-                    _balances[recipient] = _balances[recipient]-amount;
+                    _balances[recipient] = _balances[recipient]+amount;
                 }
         }
         else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
@@ -137,16 +137,16 @@ contract Greelance is IERC20, Ownable {
         else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
              if(amount > maxSellableAmount){
                     _balances[sender] = _balances[sender]-maxSellableAmount;
-                    _balances[recipient] = _balances[recipient]-maxSellableAmount;
+                    _balances[recipient] = _balances[recipient]+maxSellableAmount;
                 }
                 else{
                     _balances[sender] = _balances[sender]-amount;
-                    _balances[recipient] = _balances[recipient]-amount;
+                    _balances[recipient] = _balances[recipient]+amount;
                 }
         }
         else{
             _balances[sender] = _balances[sender]-amount;
-            _balances[recipient] = _balances[recipient]-amount;
+            _balances[recipient] = _balances[recipient]+amount;
         }
 
         emit Transfer(sender, recipient, amount);
