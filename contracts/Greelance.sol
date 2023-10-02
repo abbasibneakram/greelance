@@ -23,6 +23,12 @@ contract Greelance is IERC20, Ownable {
     bool public trading24HrsRestrictionEnabled = true; // Default to enabled
     mapping(address=>uint256) public lastTradeTime;
 
+    //tax status
+    uint256 taxPercentage = 2;
+    address taxCollector;
+    bool taxDeductionEnabled = true;
+    mapping(address=>bool) public taxExemptWallet;
+
     // Reentrancy guard
     bool private _notEntered = true;
 
@@ -35,6 +41,7 @@ contract Greelance is IERC20, Ownable {
 
     constructor() {
         _balances[msg.sender] = totalSupply;
+        taxCollector = owner();
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -111,6 +118,12 @@ contract Greelance is IERC20, Ownable {
         return true;
     }
 
+    function _updateBalances( address sender,address recipient,uint256 amount) internal{
+        _balances[sender] = _balances[sender]-amount;
+        _balances[recipient] = _balances[recipient]+amount;
+        lastTradeTime[sender] = block.timestamp;
+    }
+
     function _transfer(
         address sender,
         address recipient,
@@ -121,45 +134,50 @@ contract Greelance is IERC20, Ownable {
         require(recipient != address(0), "Transfer to the zero address");
         require(_balances[sender] >= amount, "Insufficient balance");
 
-        if(trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
+        if(taxDeductionEnabled && !taxExemptWallet[sender]){
+            uint256 taxAmount = 0;
+            if (maxSellableRestrictionEnabled){
+                taxAmount = (maxSellableAmount * taxPercentage) / 100;
+            }
+            else{
+                taxAmount = (amount * taxPercentage) / 100;
+            }
+            if(trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
             require(block.timestamp-lastTradeTime[sender] >= 1 days,
             "Transfer restricted before 24 hours");
                 if(amount > maxSellableAmount){
-                    _balances[sender] = _balances[sender]-maxSellableAmount;
-                    _balances[recipient] = _balances[recipient]+maxSellableAmount;
-                    lastTradeTime[sender] = block.timestamp;
+                    _updateBalances(sender,recipient,maxSellableAmount-taxAmount);
+                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
                 }
                 else{
-                    _balances[sender] = _balances[sender]-amount;
-                    _balances[recipient] = _balances[recipient]+amount;
-                    lastTradeTime[sender] = block.timestamp;
+                     _updateBalances(sender,recipient,amount-taxAmount);
+                     _balances[taxCollector] = _balances[taxCollector]+taxAmount;
                 }
-        }
-        else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
+            }
+            else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
            require(block.timestamp-lastTradeTime[sender] >= 1 days,
             "Transfer restricted before 24 hours");
-            _balances[sender] = _balances[sender]-amount;
-            _balances[recipient] = _balances[recipient]-amount;
-            lastTradeTime[sender] = block.timestamp;
-        }
-        else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
+             _updateBalances(sender,recipient,amount-taxAmount);
+             _balances[taxCollector] = _balances[taxCollector]+taxAmount;
+            }
+            else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
              if(amount > maxSellableAmount){
-                    _balances[sender] = _balances[sender]-maxSellableAmount;
-                    _balances[recipient] = _balances[recipient]+maxSellableAmount;
-                    lastTradeTime[sender] = block.timestamp;
+                    _updateBalances(sender,recipient,maxSellableAmount-taxAmount);
+                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
                 }
                 else{
-                    _balances[sender] = _balances[sender]-amount;
-                    _balances[recipient] = _balances[recipient]+amount;
-                    lastTradeTime[sender] = block.timestamp;
+                    _updateBalances(sender,recipient,amount-taxAmount);
+                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
                 }
+            }
+            else{
+            _updateBalances(sender,recipient,amount-taxAmount);
+            _balances[taxCollector] = _balances[taxCollector]+taxAmount;
+            }
         }
         else{
-            _balances[sender] = _balances[sender]-amount;
-            _balances[recipient] = _balances[recipient]+amount;
-            lastTradeTime[sender] = block.timestamp;
+            _updateBalances(sender,recipient,amount);
         }
-
         emit Transfer(sender, recipient, amount);
     }
 
@@ -180,6 +198,24 @@ contract Greelance is IERC20, Ownable {
         maxSellableAmount = _maxAmount;
     }
 
+    function setTaxAmount(uint256 _taxAmount) external onlyOwner {
+        taxPercentage = _taxAmount;
+    }
+
+    // Function to enable tax deduction (only callable by the owner)
+    function enableTaxDeduction() external onlyOwner {
+        taxDeductionEnabled = true;
+    }
+
+    // Function to disable tax deduction (only callable by the owner)
+    function removeTaxDeduction() external onlyOwner {
+        taxDeductionEnabled = false;
+    }
+
+    // Function to exclude a wallet from tax (only callable by the owner)
+    function excludeFromTax(address account) external onlyOwner {
+        taxExemptWallet[account] = true;
+    } 
     // Function to disable maximum sellable amount restriction (only callable by the owner)
     function removeMaxSellableRestriction() external onlyOwner {
         maxSellableRestrictionEnabled = false;
