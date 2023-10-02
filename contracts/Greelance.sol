@@ -15,7 +15,7 @@ contract Greelance is IERC20, Ownable {
     mapping(address => mapping(address => uint256)) private _allowances;
 
     // Maximum sellable amount for 24 hours
-    uint256 public maxSellableAmount;
+    uint256 public maxSellableAmount= 1000*10**9;
     bool public maxSellableRestrictionEnabled = true; // Default to enabled
 
     // Trading status
@@ -24,10 +24,12 @@ contract Greelance is IERC20, Ownable {
     mapping(address=>uint256) public lastTradeTime;
 
     //tax status
-    uint256 taxPercentage = 2;
-    address taxCollector;
-    bool taxDeductionEnabled = true;
+    uint256 buyTaxPercentage = 5;
+    uint256 sellTaxPercentage = 5;
+    address immutable taxCollector;
+    bool taxDeductionEnabled = false;
     mapping(address=>bool) public taxExemptWallet;
+    address uniswapRouterAddress = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     // Reentrancy guard
     bool private _notEntered = true;
@@ -124,6 +126,7 @@ contract Greelance is IERC20, Ownable {
         lastTradeTime[sender] = block.timestamp;
     }
 
+
     function _transfer(
         address sender,
         address recipient,
@@ -134,15 +137,15 @@ contract Greelance is IERC20, Ownable {
         require(recipient != address(0), "Transfer to the zero address");
         require(_balances[sender] >= amount, "Insufficient balance");
 
-        if(taxDeductionEnabled && !taxExemptWallet[sender]){
-            uint256 taxAmount = 0;
-            if (maxSellableRestrictionEnabled){
-                taxAmount = (maxSellableAmount * taxPercentage) / 100;
-            }
-            else{
-                taxAmount = (amount * taxPercentage) / 100;
-            }
-            if(trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
+        uint256 taxRate = sender == uniswapRouterAddress ? buyTaxPercentage : sellTaxPercentage;
+        uint256 taxAmount = 0;
+        if (maxSellableRestrictionEnabled){
+            taxAmount = (maxSellableAmount * taxRate) / 100;
+        }
+        else{
+            taxAmount = (amount * taxRate) / 100;
+        }
+        if(taxDeductionEnabled && !taxExemptWallet[sender] && trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
             require(block.timestamp-lastTradeTime[sender] >= 1 days,
             "Transfer restricted before 24 hours");
                 if(amount > maxSellableAmount){
@@ -153,28 +156,41 @@ contract Greelance is IERC20, Ownable {
                      _updateBalances(sender,recipient,amount-taxAmount);
                      _balances[taxCollector] = _balances[taxCollector]+taxAmount;
                 }
-            }
-            else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
-           require(block.timestamp-lastTradeTime[sender] >= 1 days,
+        }
+        else if(taxDeductionEnabled && !taxExemptWallet[sender] && trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
+            require(block.timestamp-lastTradeTime[sender] >= 1 days,
             "Transfer restricted before 24 hours");
-             _updateBalances(sender,recipient,amount-taxAmount);
-             _balances[taxCollector] = _balances[taxCollector]+taxAmount;
-            }
-            else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
-             if(amount > maxSellableAmount){
-                    _updateBalances(sender,recipient,maxSellableAmount-taxAmount);
-                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
-                }
-                else{
-                    _updateBalances(sender,recipient,amount-taxAmount);
-                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
-                }
-            }
-            else{
             _updateBalances(sender,recipient,amount-taxAmount);
             _balances[taxCollector] = _balances[taxCollector]+taxAmount;
+        }
+        else if(taxDeductionEnabled && !taxExemptWallet[sender] && !trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
+            if(amount > maxSellableAmount){
+                    _updateBalances(sender,recipient,maxSellableAmount-taxAmount);
+                    _balances[taxCollector] = _balances[taxCollector]+taxAmount;
+            }
+            else{
+                _updateBalances(sender,recipient,amount-taxAmount);
+                _balances[taxCollector] = _balances[taxCollector]+taxAmount;
             }
         }
+        else if(taxDeductionEnabled && !taxExemptWallet[sender]){
+            _updateBalances(sender,recipient,amount-taxAmount);
+            _balances[taxCollector] = _balances[taxCollector]+taxAmount;
+        }
+        else if(!trading24HrsRestrictionEnabled && maxSellableRestrictionEnabled){
+            if(amount > maxSellableAmount){
+                    _updateBalances(sender,recipient,maxSellableAmount);
+            }
+            else{
+                _updateBalances(sender,recipient,amount);
+            }
+        }
+        else if(trading24HrsRestrictionEnabled && !maxSellableRestrictionEnabled){
+            require(block.timestamp-lastTradeTime[sender] >= 1 days,
+            "Transfer restricted before 24 hours");
+            _updateBalances(sender,recipient,amount);
+        } 
+
         else{
             _updateBalances(sender,recipient,amount);
         }
@@ -198,8 +214,12 @@ contract Greelance is IERC20, Ownable {
         maxSellableAmount = _maxAmount;
     }
 
-    function setTaxAmount(uint256 _taxAmount) external onlyOwner {
-        taxPercentage = _taxAmount;
+    function setBuyTaxAmount(uint256 _taxAmount) external onlyOwner {
+        buyTaxPercentage = _taxAmount;
+    }
+
+     function setSellTaxAmount(uint256 _taxAmount) external onlyOwner {
+        sellTaxPercentage = _taxAmount;
     }
 
     // Function to enable tax deduction (only callable by the owner)
@@ -234,5 +254,9 @@ contract Greelance is IERC20, Ownable {
     // Function to start or pause trading (only callable by the owner)
     function setTradingStatus(bool _paused) external onlyOwner {
         tradingPaused = _paused;
+    }
+
+    function setUniswapRouterAddress(address _router) external onlyOwner {
+        uniswapRouterAddress = _router;
     }
 }
